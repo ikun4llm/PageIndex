@@ -253,6 +253,13 @@ def extract_toc(
 
     # ----- 11) Outline assembly and validation gate ---------------------
     outline_nodes = assemble_outline(doc, section_openers)
+    pending = list(outline_nodes)
+    assembled_heading_count = 0
+    while pending:
+        node = pending.pop()
+        assembled_heading_count += 1
+        pending.extend(node.child_nodes)
+    layout_status = "accepted" if outline_nodes else "no_headings"
     # Validate the assembled outline. Structured outlines must cover enough
     # chapters; unstructured outlines are filtered by density gap.
     # The abstract/references signal rides along with this gate: it is False on
@@ -261,6 +268,7 @@ def extract_toc(
     if is_outline_valid(doc, outline_nodes):
         if not is_chapter_outline_valid(doc, outline_nodes):
             outline_nodes = []
+            layout_status = "chapter_validation_failed"
         has_abstract_or_references = False
     else:
         mark_outline_block_types(outline_nodes)
@@ -270,6 +278,7 @@ def extract_toc(
             and compute_max_heading_gap(outline_nodes, 1)["max_gap"] > 0.85 * page_count
         ):
             outline_nodes = []
+            layout_status = "heading_gap_too_large"
         has_abstract_or_references = has_table_or_prominent(outline_nodes)
     if outline_nodes:
         structure = outline_to_dict_tree(outline_nodes, total_pages=len(pages))
@@ -296,6 +305,15 @@ def extract_toc(
         "has_abstract_or_references_section": has_abstract_or_references,
         "page_texts": page_texts,
         "toc_source": "detected",
+        "diagnostics": {
+            "page_count": len(pages),
+            "text_page_count": sum(bool(text.strip()) for text in page_texts),
+            "textless_pages": [i for i, text in enumerate(page_texts, 1)
+                               if not text.strip()],
+            "section_opener_count": len(section_openers),
+            "assembled_heading_count": assembled_heading_count,
+            "layout_status": layout_status,
+        },
     }
     if use_embedded_toc:
         from .embedded_toc import apply_embedded_toc
